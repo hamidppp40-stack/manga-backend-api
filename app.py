@@ -3,7 +3,16 @@ import cloudscraper
 from bs4 import BeautifulSoup
 
 app = Flask(__name__)
-scraper = cloudscraper.create_scraper()
+
+# إعداد سحابي يتجاوز حماية Cloudflare بشكل كامل
+scraper = cloudscraper.create_scraper(
+    browser={
+        'browser': 'firefox',
+        'platform': 'android',
+        'desktop': False
+    }
+)
+
 BASE_URL = "https://manga3asq.com"
 
 @app.route('/')
@@ -19,11 +28,20 @@ def get_latest():
         page = request.args.get('page', 1)
         url = f"{BASE_URL}/page/{page}/" if int(page) > 1 else BASE_URL
         
-        response = scraper.get(url)
+        # جلب الصفحات باستخدام cloudscraper مع headers سليمة
+        response = scraper.get(url, timeout=15)
+        
+        if response.status_code != 200:
+            return jsonify({
+                "success": False,
+                "error": f"Failed to fetch website, status code: {response.status_code}"
+            }), 500
+
         soup = BeautifulSoup(response.text, 'html.parser')
         
         manga_list = []
-        for item in soup.select('div.page-item-detail, div.manga-item'):
+        # البحث عن عناصر المانجا في الموقع
+        for item in soup.select('div.page-item-detail, div.manga-item, div.row.c-tabs-item__content'):
             title_tag = item.select_one('h3 a, h4 a, .post-title a')
             img_tag = item.select_one('img')
             
@@ -33,7 +51,7 @@ def get_latest():
                 
                 img_url = ''
                 if img_tag:
-                    img_url = img_tag.get('src') or img_tag.get('data-src') or ''
+                    img_url = img_tag.get('data-src') or img_tag.get('src') or ''
                 
                 manga_list.append({
                     'title': title,
